@@ -20,10 +20,10 @@ setwd('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis
 
 ## Load in data:
 
-COCA <- read_csv('COCA_adjective_noun_pairs.csv')
+COCA <- read_csv('COCA_adj_noun_pairs.csv')
 war <- read_csv('warriner_2013_affective_norms.csv')
 lyn <- read_csv('lynott_connell_2009_adj_norms.csv')
-SUBTL <- read_csv('SUBTLEX_US_with_POS.csv')
+SUBTL <- read_csv('SUBTLEX_US_POS.csv')
 
 ## For how many Lynott & Connell words is there data?
 
@@ -58,12 +58,12 @@ COCA <- na.omit(COCA)
 
 ## Load function for empty plot:
 
-source('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis/scripts/emptyplot.R')
+source('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis/scripts/functions.R')
 
 
 
 ##------------------------------------------------------------------
-## Compute correlation of adjective and noun valence:
+## Compute correlation of adjective and noun valence, adjective averages:
 ##------------------------------------------------------------------
 
 ## Get frequency weights at the adjective level:
@@ -136,7 +136,7 @@ newdata <- as_tibble(predict(xmdl,
 ## Make a plot of the correlation:
 
 quartz('', 9, 6)
-par(mai = c(1.5, 1.5, 0.5, 0.5))
+par(mai = c(1.5, 1.5, 1.5, 0.5))
 emptyplot(xlim = c(1, 9), ylim = c(4, 7))
 axis(side = 1, at = 1:9,
 	font = 2, cex.axis = 1.5, lwd = 2, lwd.ticks = 2)
@@ -153,10 +153,11 @@ with(COCA_agr,
 # with(COCA_agr,
 	# text(AdjVal, NounValW, labels = Word, pch = 16,
 		# col = rgb(0, 0, 0, 0.65), cex = 1.5))
-polygon(x = c(seq(0, 10, 0.01), rev(seq(0, 10, 0.01))),
-	y = c(newdata$UB, rev(newdata$LB)),
-	col = rgb(0, 0, 0, 0.5), border = NA)
+# polygon(x = c(seq(0, 10, 0.01), rev(seq(0, 10, 0.01))),
+	# y = c(newdata$UB, rev(newdata$LB)),
+	# col = rgb(0, 0, 0, 0.5), border = NA)
 abline(xmdl, lwd = 3)
+abline(v = 5, lty = 2, lwd = 2)
 
 ## Find biggest residuals:
 
@@ -169,6 +170,16 @@ filter(COCA_agr, Word == 'mild')
 filter(COCA_agr, Word == 'tinkling')
 filter(COCA, Word == 'mild') %>% arrange(desc(Freq))
 filter(COCA, Word == 'tinkling') %>% arrange(desc(Freq))
+
+## Write COCA_agr file for comparison with Yelp stars:
+
+write_csv(COCA_agr, 'COCA_contexts.csv')
+
+
+
+##------------------------------------------------------------------
+## Bootstrapped correlations without aggregating:
+##------------------------------------------------------------------
 
 ## Bootstrap the correlation coefficients on the full dataset, setup:
 
@@ -417,10 +428,10 @@ COCA <- mutate(COCA,
 	Noun = as.factor(Noun))
 # xgam <- bam(AbsValDiff ~ s(LogFreq, k = 5), data = COCA,
 	# method = 'fREML')
-xgam <- bam(AbsValDiff ~ s(LogFreq, k = 5) +
-	s(LogFreq, Word, bs = 'fs', k = 5, m = 1) +
-	s(LogFreq, Noun, bs = 'fs', k = 5, m = 1),
-	data = COCA, method = 'fREML')
+# xgam <- bam(AbsValDiff ~ s(LogFreq, k = 5) +
+	# s(LogFreq, Word, bs = 'fs', k = 5, m = 1) +
+	# s(LogFreq, Noun, bs = 'fs', k = 5, m = 1),
+	# data = COCA, method = 'fREML')
 summary(xgam)
 
 ## Extract GAM terms for plotting:
@@ -441,7 +452,7 @@ axis(side = 2, at = 0:7,
 	font = 2, lwd.ticks = 2, lwd = 2,
 	cex.axis = 1.25, las = 2)
 mtext(side = 2, text = 'Absolute Valence Difference',
-	line = 4.15, font = 2, cex = 1.8)
+	line = 3.9, font = 2, cex = 1.8)
 with(COCA,
 	points(x = LogFreq, y = AbsValDiff,
 		col = rgb(0, 0, 0, 0.5), pch = 16))
@@ -519,6 +530,15 @@ both %>% ggplot(aes(x = AbsValDiff, fill = Attested, col = Attested)) +
 
 wilcox.test(unattested$ValDiff, COCA$ValDiff)
 
+## Make a better model of this:
+
+xmdl.comp <- lmer(AbsValDiff ~ Attested + (1 + Attested|Word),
+	data = both, REML = F)
+xmdl.comp.null <- lmer(AbsValDiff ~ 1 + (1 + Attested|Word),
+	data = both, REML = F)
+anova(xmdl.comp.null, xmdl.comp)
+summary(xmdl.comp)
+
 ## Check averages:
 
 both %>% group_by(Attested) %>%
@@ -536,9 +556,6 @@ both_agr <- both %>% group_by(Word, Attested) %>%
 
 both_agr %>% ggplot(aes(x = Attested, y = AbsValDiff, fill = Attested)) + geom_boxplot()
 both_agr[c(T, F), ]$AbsValDiff - both_agr[c(F, T), ]$AbsValDiff
-
-
-
 
 ## Second analysis, where existing adj-noun combinations are reshuffled,
 ## create pair identifiers:
@@ -576,12 +593,37 @@ all_combs <- mutate(all_combs,
 	ValDiff = AdjVal - NounVal,
 	AbsValDiff = abs(ValDiff))
 
+## Do a significance test of this:
+
+xmdl.combs <- lmer(AbsValDiff ~ Attested + (1 + Attested|Word) + (1 + Attested|Noun),
+	data = both, REML = F)
+xmdl.combs.null <- lmer(AbsValDiff ~ 1 + (1 + Attested|Word) + (1 + Attested|Noun),
+	data = both, REML = F)
+anova(xmdl.combs.null, xmdl.combs)
+summary(xmdl.combs)
+
+## Take by-adjective averages:
+
+both_agr <- both %>% group_by(Word, Attested) %>%
+	summarize(AbsValDiff = mean(AbsValDiff))
+with(both_agr, t.test(AbsValDiff ~ Attested, paired = T))
+
+## Take by-noun averages:
+
+both_agr <- both %>% group_by(Noun, Attested) %>%
+	summarize(AbsValDiff = mean(AbsValDiff))
+with(both_agr, t.test(AbsValDiff ~ Attested, paired = F))	# some missing
+
 ## Look at means and SDs:
 
 all_combs %>% group_by(Attested) %>%
 	summarize(AbsValDiff = mean(AbsValDiff),
 		AbsValDiffSD = sd(AbsValDiff))	# why NA?
 aggregate(AbsValDiff ~ Attested, all_combs, sd)
+
+## How many words for each?
+
+all_combs %>% group_by(Attested) %>% count()
 
 ## Make a quick plot of densities:
 
@@ -622,10 +664,18 @@ mtext(side = 1, text = 'Absolute Valence Difference',
 	line = 4, font = 2, cex = 2)
 polygon(x = c(attesteds$x, rev(attesteds$x)),
 	y = c(attesteds$y, rep(0, nrow(attesteds))),
-	border = NA, col = rgb(0.8, 0.4, 0.2, 0.5))
+	border = T, col = rgb(0, 0, 0, 0.1), lty = 1, lwd = 2)
 polygon(x = c(unattesteds$x, rev(unattesteds$x)),
 	y = c(unattesteds$y, rep(0, nrow(unattesteds))),
-	border = NA, col = rgb(0.2, 0.4, 0.8, 0.5))
+	border = T, col = rgb(0, 0, 0, 0.5), lty = 3, lwd = 2)
+legend('topright', fill = c(rgb(0, 0, 0, 0.1), rgb(0, 0, 0, 0.5)),
+	legend = c('Attested', 'Unattested'), box.lwd = 2, cex = 1.25)
+# polygon(x = c(attesteds$x, rev(attesteds$x)),
+	# y = c(attesteds$y, rep(0, nrow(attesteds))),
+	# border = NA, col = rgb(0.8, 0.4, 0.2, 0.5))
+# polygon(x = c(unattesteds$x, rev(unattesteds$x)),
+	# y = c(unattesteds$y, rep(0, nrow(unattesteds))),
+	# border = NA, col = rgb(0.2, 0.4, 0.8, 0.5))
 
 
 

@@ -464,7 +464,7 @@ for (i in 1:5) {
 	rect(xleft = lyn_typecounts[i, ]$XStart + 1,
 		xright = lyn_typecounts[i, ]$XStart + 2 + xfac,
 		ybottom = 0, ytop = lyn_typecounts[i, ]$subjective_p,
-		lwd = 2, col = 'darkgrey')
+		lwd = 2, col = '#ccc2d9')	# darkgrey
 	text(x = mean(c(lyn_typecounts[i, ]$XStart + 1,
 			lyn_typecounts[i, ]$XStart + 2 + xfac)),
 		y = lyn_typecounts[i, ]$subjective_p + 0.025,
@@ -480,7 +480,7 @@ for (i in 1:5) {
 		y = -0.04, xpd = NA, font = 2, cex = 1.5,
 		labels = lyn_typecounts[i, ]$Modality)
 	}
-legend("topright", fill = c('white', 'darkgrey'), 
+legend("topright", fill = c('white', '#ccc2d9'), 	#darkgrey
 	legend = c('Objective', 'Subjective'), box.lwd = 2)
 
 

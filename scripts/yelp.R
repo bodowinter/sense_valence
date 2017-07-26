@@ -29,6 +29,10 @@ yelp <- yelp %>% rename(ID = review_id,
 
 lyn <- read_csv('lynott_connell_2009_adj_norms.csv')
 
+## Take words that are in Lynott & Connell (2009):
+
+yelp_lyn <- yelp %>% filter(Word %in% pull(lyn, Word))
+
 ## Filter Lynott & Connell (2009) dataset:
 
 lyn <- lyn %>% select(Word, DominantModality) %>%
@@ -36,19 +40,20 @@ lyn <- lyn %>% select(Word, DominantModality) %>%
 
 ## First, words that occur less than 50 times:
 
-word_counts <- yelp %>% group_by(Word) %>% count() %>% filter(n <= 50)
+word_counts <- yelp_lyn %>% group_by(Word) %>% count() %>% filter(n <= 50)
 
 ## Get rid of those words:
 
-yelp <- yelp %>% anti_join(word_counts)
+yelp_lyn <- yelp_lyn %>% anti_join(word_counts)
 
-## Take words that are in Lynott & Connell (2009):
+## Exclude the word 'coconutty' since it is
+## the only one that does not occur with all five stars:
 
-yelp_lyn <- yelp %>% filter(Word %in% pull(lyn, Word))
+yelp_lyn <- yelp_lyn %>% filter(Word != 'coconutty')
 
 ## Load function for empty plot:
 
-source('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis/scripts/emptyplot.R')
+source('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis/scripts/functions.R')
 
 
 
@@ -68,10 +73,6 @@ lyn_counts <- lyn_counts %>% group_by(Word) %>%
 	summarize(Total = sum(n)) %>%
 	right_join(lyn_counts)
 
-## Exclude the word 'coconutty' since it is the only one that does not occur with all five stars:
-
-lyn_counts <- lyn_counts %>% filter(Word != 'coconutty')
-
 ## Get overall star counts:
 
 star_counts <- lyn_counts %>% group_by(Stars) %>%
@@ -87,7 +88,7 @@ lyn_counts <- lyn %>% right_join(lyn_counts)
 
 ## Compute proportion and also rating-relative log odds (Potts & Schwarz, 2010):
 
-lyn_counts <- lyn_counts %>% mutate(Odds = n / (Total - n),
+lyn_counts <- lyn_counts %>% mutate(Odds = n / (StarTotal - n),
 	Logit = log(Odds),
 	Prop = n / Total,
 	StarProp = n / StarTotal)
@@ -178,9 +179,12 @@ axis(side = 2, seq(2, 8, 2),
 	font = 2, lwd.ticks = 2, lwd = 2,
 	cex.axis = 1.25, xpd = NA, las = 2)
 mtext(side = 2, text = 'Valence Rating',
-	line = 3.8, font = 2, cex = 2)
+	line = 3.5, font = 2, cex = 2)
+# with(lyn_war,
+	# points(x = AvgStar, y = Val, pch = 16,
+		# cex = 1.15, col = rgb(0, 0, 0, 0.65)))
 with(lyn_war,
-	points(x = AvgStar, y = Val, pch = 16,
+	text(x = AvgStar, y = Val, pch = 16, labels = Word,
 		cex = 1.15, col = rgb(0, 0, 0, 0.65)))
 with(newpred,
 	polygon(x = c(AvgStar, rev(AvgStar)),
@@ -188,11 +192,169 @@ with(newpred,
 with(newpred, points(x = AvgStar, y = fit,
 	type = 'l', col = 'black', lwd = 4))
 
+## Build a regression model, the reverse, for plotting:
+
+xmdl.val <- lm(AvgStar ~ Val, data = lyn_war)
+newpred.val <- tibble(Val = seq(1, 10, 0.01))
+newpred.val2 <- as_tibble(predict(xmdl.val, newpred.val, se.fit = T)[1:2])
+newpred.val <- bind_cols(newpred.val, newpred.val2) %>%
+	mutate(LB = fit - 1.96 * se.fit,
+		UB = fit + 1.96 * se.fit); rm(newpred.val2)
+
+## Make a publication ready plot for this:
+
+quartz('', 9, 6)
+par(mai = c(1.5, 1.75, 0.5, 0.5))
+emptyplot(xlim = c(2, 8), ylim = c(1, 5))
+axis(side = 2, at = 1:5,
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA, las = 2)
+mtext(side = 1, text = 'Valence Rating',
+	line = 4, font = 2, cex = 2)
+axis(side = 1, seq(2, 8, 1),
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA)
+mtext(side = 2, text = 'Yelp Stars',
+	line = 3.5, font = 2, cex = 2)
+with(lyn_war,
+	points(x = Val, y = AvgStar, pch = 16,
+		cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+# with(lyn_war,
+	# text(x = Val, y = AvgStar, pch = 16, labels = Word,
+		# cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+with(newpred.val,
+	polygon(x = c(Val, rev(Val)),
+		y = c(UB, rev(LB)), col = rgb(0, 0, 0, 0.4), border = NA))
+with(newpred.val, points(x = Val, y = fit,
+	type = 'l', col = 'black', lwd = 4))
+abline(v = 5, lty = 2, lwd = 2)
+
+## Load in adjective-noun context valence:
+
+COCA_agr <- read_csv('COCA_contexts.csv')
+
+## Merge & correlate:
+
+COCA_yelp <- left_join(lyn_agr, COCA_agr) %>%
+	filter(!is.na(NounVal))
+COCA_yelp <- filter(COCA_yelp, !is.na(NounVal))
+
+## Perform a correlation:
+
+with(COCA_yelp, cor.test(AvgStar, NounVal))
+
+## Build a model:
+
+xmdl.cont <- lm(AvgStar ~ NounVal, data = COCA_yelp)
+newpred.cont <- tibble(NounVal = seq(1, 10, 0.01))
+newpred.cont2 <- as_tibble(predict(xmdl.cont, newpred.cont, se.fit = T)[1:2])
+newpred.cont <- bind_cols(newpred.cont, newpred.cont2) %>%
+	mutate(LB = fit - 1.96 * se.fit,
+		UB = fit + 1.96 * se.fit); rm(newpred.cont2)
+
+## Make a publication ready plot for this:
+
+quartz('', 9, 6)
+par(mai = c(1.5, 1.75, 0.5, 0.5))
+emptyplot(xlim = c(4, 7), ylim = c(1, 5))
+axis(side = 2, at = 1:5,
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA, las = 2)
+mtext(side = 1, text = 'Noun Context Valence',
+	line = 4, font = 2, cex = 2)
+axis(side = 1, seq(4, 7, 1),
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA)
+mtext(side = 2, text = 'Yelp Stars',
+	line = 3.5, font = 2, cex = 2)
+with(COCA_yelp,
+	points(x = NounVal, y = AvgStar, pch = 16,
+		cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+# with(lyn_war,
+	# text(x = Val, y = AvgStar, pch = 16, labels = Word,
+		# cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+with(newpred.cont,
+	polygon(x = c(NounVal, rev(NounVal)),
+		y = c(UB, rev(LB)), col = rgb(0, 0, 0, 0.4), border = NA))
+with(newpred.cont, points(x = NounVal, y = fit,
+	type = 'l', col = 'black', lwd = 4))
+
+## Combine both in publication-ready plot:
+
+quartz('', 11, 5)
+par(mai = c(0.5, 0.15, 0.5, 0.15), omi = c(1, 1.5, 0, 0), mfrow = c(1, 2))
+# Plot 1:
+emptyplot(xlim = c(2, 8), ylim = c(1, 5))
+text(x = 2 + 0.02 * 6, y = 4.8, labels = '(a)', font = 2, cex = 1.5)
+axis(side = 2, at = 1:5,
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA, las = 2)
+mtext(side = 1, text = 'Adjective Valence Rating',
+	line = 4, font = 2, cex = 2)
+mtext(side = 1, text = 'Warriner et al. (2013)',
+	line = 5.8, font = 2, cex = 1.5)
+axis(side = 1, seq(2, 8, 1),
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA)
+mtext(side = 2, text = 'Yelp Stars',
+	line = 3.5, font = 2, cex = 2)
+with(lyn_war,
+	points(x = Val, y = AvgStar, pch = 16,
+		cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+with(newpred.val,
+	polygon(x = c(Val, rev(Val)),
+		y = c(UB, rev(LB)), col = rgb(0, 0, 0, 0.4), border = NA))
+with(newpred.val, points(x = Val, y = fit,
+	type = 'l', col = 'black', lwd = 4))
+# Plot 2:
+emptyplot(xlim = c(4.5, 6.5), ylim = c(1, 5))
+text(x = 4.5 + 0.02 * 2, y = 4.8, labels = '(b)', font = 2, cex = 1.5)
+mtext(side = 1, text = 'Noun Context Valence',
+	line = 4, font = 2, cex = 2)
+mtext(side = 1, text = '(COCA adjective-noun pairs)',
+	line = 5.8, font = 2, cex = 1.5)
+axis(side = 1, seq(4.5, 6.5, 0.5),
+	font = 2, lwd.ticks = 2, lwd = 2,
+	cex.axis = 1.25, xpd = NA)
+with(COCA_yelp,
+	points(x = NounVal, y = AvgStar, pch = 16,
+		cex = 1.15, col = rgb(0, 0, 0, 0.65)))
+with(newpred.cont,
+	polygon(x = c(NounVal, rev(NounVal)),
+		y = c(UB, rev(LB)), col = rgb(0, 0, 0, 0.4), border = NA))
+with(newpred.cont, points(x = NounVal, y = fit,
+	type = 'l', col = 'black', lwd = 4))
+
+
 ## Test modality effect:
 
 xmdl.mod <- lm(AvgStar ~ Modality, data = lyn_war)
 summary(xmdl.mod)
 anova(xmdl.mod)
+
+## Look at averages:
+
+lyn_war %>% group_by(Modality) %>%
+	summarize(AvgStar = mean(AvgStar)) %>%
+	arrange(desc(AvgStar)) %>% mutate(AvgStar = round(AvgStar, 2))
+
+## Find residuals for valence model:
+
+xmdl.mod <- lm(AvgStar ~ Val, data = lyn_war)
+summary(xmdl.mod)
+anova(xmdl.mod)
+
+## Find the biggest residuals:
+
+lyn_war_resid <- lyn_war
+lyn_war_resid$Resid <- residuals(xmdl.mod)
+lyn_war_resid <- mutate(lyn_war_resid,
+	AbsResid = abs(Resid)) %>% arrange(desc(AbsResid))
+
+## Check a few words:
+
+filter(lyn_war_resid, Word == 'lukewarm')
+filter(lyn_war_resid, Word == 'mild')
 
 
 
@@ -263,8 +425,10 @@ print(coefs_agr <- lyn_coefs %>% group_by(Modality) %>%
 
 quartz('', 9, 6)
 par(mai = c(1.25, 1.75, 0.5, 0.5))
-emptyplot(xlim = c(0, 0.6), ylim = c(-0.15, 0.1))
-axis(side = 1, at = seq(0, 0.6, 0.1),
+emptyplot(xlim = c(-0.35, 0.3), ylim = c(-0.2, 0.1))
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+axis(side = 1, at = seq(-0.3, 0.3, 0.15),
 	lwd.ticks = 2, lwd = 2, font = 2, cex.axis = 1.25)
 mtext(side = 1, text = 'Linear Potts Coefficient',
 	line = 4.2, font = 2, cex = 1.8)
@@ -276,6 +440,28 @@ with(coefs_agr,
 	points(x = b1, y = b2, pch = 3, cex = 1.8, lwd = 2))
 with(coefs_agr,
 	text(x = b1, y = b2 - 0.02, pch = 3, cex = 1.8, lwd = 2,
+		labels = c('Sound', 'Taste', 'Touch', 'Smell', 'Sight'),
+		font = 2))
+
+## Make a plot of this FOR TEST:
+
+quartz('', 9, 6)
+par(mai = c(1.25, 1.75, 0.5, 0.5))
+emptyplot(xlim = c(-0.35, 0.3), ylim = c(-10, -7))
+abline(h = 0, lty = 2)
+abline(v = 0, lty = 2)
+axis(side = 1, at = seq(-0.3, 0.3, 0.15),
+	lwd.ticks = 2, lwd = 2, font = 2, cex.axis = 1.25)
+mtext(side = 1, text = 'Linear Potts Coefficient',
+	line = 4.2, font = 2, cex = 1.8)
+mtext(side = 2, text = 'Intercept Potts Coefficient',
+	line = 4.8, font = 2, cex = 1.8)
+axis(side = 2, at = round(seq(-0.15, 0.1, 0.05), 2),
+	lwd.ticks = 2, lwd = 2, font = 2, cex.axis = 1.25, las = 2)
+with(coefs_agr,
+	points(x = b1, y = b0, pch = 3, cex = 1.8, lwd = 2))
+with(coefs_agr,
+	text(x = b1, y = b0 - 0.02, pch = 3, cex = 1.8, lwd = 2,
 		labels = c('Sound', 'Taste', 'Touch', 'Smell', 'Sight'),
 		font = 2))
 
@@ -301,10 +487,13 @@ xmdl <- lmer(Logit ~ Stars_c + Stars_c2 + Modality +
 mods <- c('Gustatory', 'Olfactory', 'Haptic', 'Auditory', 'Visual')
 xpreds <- tibble(Modality = rep(mods, each = 5),
 	Stars_c = rep(1:5 - 3, times = 5), Stars_c2 = rep(1:5 - 3, times = 5) ^ 2)
-source('/Users/winterb/Research/senses_sensory_modalities/review_valence/analysis/scripts/predict.glmm.R')
 xpreds <- predict.glmm(xmdl, newdata = xpreds, type = 'gaussian')
 
 ## Plot those predictions:
+
+## Define colors:
+
+mycols <- c('#425fac', '#30b77d', '#f79038', '#f37058', '#efbe1b')
 
 quartz('', 11, 6)
 par(mfrow = c(2, 3),
@@ -312,16 +501,16 @@ par(mfrow = c(2, 3),
 for (i in 1:5) {
 	this_mod <- mods[i]
 	this_pred <- xpreds %>% filter(Modality == this_mod)
-	emptyplot(xlim = c(0.5, 5.5), ylim = c(-4, 0.5))
-	text(x = 3, y = 0,
-		labels = c('Taste', 'Smell', 'Touch', 'Sound', 'Sight')[i],
-		font = 2, cex = 2.5)
+	emptyplot(xlim = c(0.5, 5.5), ylim = c(-11, -6))
+	# text(x = 3, y = 0,
+		# labels = c('Taste', 'Smell', 'Touch', 'Sound', 'Sight')[i],
+		# font = 2, cex = 2.5)
 	if (i %in% c(1, 4)) {
-		axis(side = 2, at = seq(-4, 0, 2),
-			las = 2, font = 2, cex.axis = 1.25, lwd.ticks = 2,
-			lwd = 2)
+		# axis(side = 2, at = seq(-4, 0, 2),
+			# las = 2, font = 2, cex.axis = 1.25, lwd.ticks = 2,
+			# lwd = 2)
 		mtext(side = 2, font = 2, text = 'Log odds',
-			line = 3.5, cex = 1.5)
+			line = 0.5, cex = 1.5)
 		}
 	if (i %in% 4:5) {
 		mtext(side = 1, text = 'Yelp Star', line = 4.2, font = 2, cex = 1.3)
@@ -329,10 +518,10 @@ for (i in 1:5) {
 	axis(side = 1, at = 1:5,
 		font = 2, cex.axis = 1.25, lwd.ticks = 2)
 	points(1:5, this_pred$Logit, type = 'b',
-		lwd = 2, pch = 15, cex = 1.25)
+		lwd = 3, pch = 15, cex = 1.6, col = mycols[i])
 	segments(x0 = 1:5, x1 = 1:5,
 		y0 = this_pred$LB, y1 = this_pred$UB,
-		lwd = 1)
+		lwd = 2, col = mycols[i])
 	}
 
 
@@ -391,7 +580,7 @@ quartz('', 11, 6)
 par(mfrow = c(2, 3), omi = c(0.15, 0.75, 0.5, 0), mai = c(1, 0.25, 0.25, 0))
 potts(adj = 'rancid', data = lyn_counts,
 	y_axis = T, rating = F, relative = T)
-mtext(side = 2, text = 'P(w|r)',
+mtext(side = 2, text = 'P(r|w)',
 	font = 2, cex = 1.8, line = 2)
 potts(adj = 'reeking', data = lyn_counts,
 	y_axis = F, rating = F, relative = T)
@@ -399,9 +588,23 @@ potts(adj = 'fragrant', data = lyn_counts,
 	y_axis = F, rating = F, relative = T)
 potts(adj = 'sweet', data = lyn_counts,
 	y_axis = F, rating = T, relative = T)
-mtext(side = 2, text = 'P(w|r)',
+mtext(side = 2, text = 'P(r|w)',
 	font = 2, cex = 1.8, line = 2)
 potts(adj = 'tangy', data = lyn_counts,
 	y_axis = T, rating = T, relative = T)
 potts(adj = 'stale', data = lyn_counts,
 	y_axis = F, rating = T, relative = T)
+
+## Make a Potts curve for 'reeking' and one for 'fragrant':
+
+quartz('', 11, 6)
+par(mfrow = c(1, 2), omi = c(0.15, 0.75, 0.5, 0), mai = c(1, 0.25, 0.25, 0))
+potts(adj = 'reeking', data = lyn_counts,
+	y_axis = F, rating = F, relative = T)
+mtext(side = 2, text = 'P(r|w)',
+	font = 2, cex = 1.8, line = 2)
+potts(adj = 'fragrant', data = lyn_counts,
+	y_axis = F, rating = F, relative = T)
+
+
+

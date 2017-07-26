@@ -150,7 +150,7 @@ newpred <- as_tibble(predict.glmm(xmdl, newdata = newpred))
 ## Plot this:
 
 quartz('', 9, 6)
-par(mai = c(1.25, 1.75, 0.5, 0.5))
+par(mai = c(1.25, 1.75, 1.5, 0.5))
 emptyplot(xlim = c(0, 3), ylim = c(0, 3))
 axis(side = 1, at = seq(0, 3, 0.5),
 	lwd = 2, lwd.ticks = 2, font = 2, cex.axis = 1.5)
